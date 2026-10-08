@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Python 在线运行环境 v3.1</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/monokai.min.css">
+<style>
+:root{
+  --bg:#12141a; --panel:#191c24; --panel2:#20242e; --line:#2b3040;
+  --fg:#dfe3ec; --dim:#8b93a7; --accent:#4ea1ff; --ok:#57d38c; --err:#ff6b6b; --warn:#ffc857;
+  --mono:"SFMono-Regular",Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+}
+html[data-theme="light"]{
+  --bg:#f5f6f8; --panel:#ffffff; --panel2:#eef1f6; --line:#d8dde7;
+  --fg:#1d2230; --dim:#6b7385; --accent:#1a6fd4; --ok:#1a9c5b; --err:#d63b3b; --warn:#b8860b;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg);color:var(--fg);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Segoe UI,sans-serif;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+/* ---------- 工具栏 ---------- */
+header{
+  flex:0 0 auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  padding:8px 12px;background:var(--panel);border-bottom:1px solid var(--line);
+}
+.brand{font-weight:700;letter-spacing:.3px;margin-right:4px}
+.brand small{font-weight:400;color:var(--dim);margin-left:6px}
+button,select,input,textarea{font-family:inherit;font-size:13px;color:var(--fg)}
+button{
+  background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+  padding:6px 12px;cursor:pointer;transition:.15s;
+}
+button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.primary:hover:not(:disabled){filter:brightness(1.08);color:#fff}
+button.danger:hover:not(:disabled){border-color:var(--err);color:var(--err)}
+input[type=text],select,textarea{
+  background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:5px 8px;outline:none;
+}
+input[type=text]:focus,textarea:focus,select:focus{border-color:var(--accent)}
+.spacer{flex:1}
+#status{display:flex;align-items:center;gap:6px;color:var(--dim);font-size:12px;min-width:180px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:0 0 auto}
+.dot.ok{background:var(--ok)}.dot.err{background:var(--err)}.dot.run{background:var(--accent);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.35}}
+/* ---------- 加载进度 ---------- */
+#loadWrap{flex:0 0 auto;height:3px;background:var(--panel2);overflow:hidden;display:none}
+#loadWrap.on{display:block}
+#loadWrap.ind #loadBar{width:35% !important;animation:slide 1.2s ease-in-out infinite}
+#loadBar{height:100%;width:0;background:var(--accent);transition:width .2s}
+@keyframes slide{0%{margin-left:-35%}100%{margin-left:100%}}
+/* ---------- 主体 ---------- */
+main{flex:1 1 auto;display:flex;min-height:0}
+.pane{display:flex;flex-direction:column;min-width:0;min-height:0}
+#left{flex:1 1 58%}
+#splitter{flex:0 0 6px;cursor:col-resize;background:var(--line);transition:.15s}
+#splitter:hover{background:var(--accent)}
+#right{flex:1 1 42%}
+.pane-head{
+  flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:6px 10px;
+  font-size:12px;color:var(--dim);background:var(--panel);border-bottom:1px solid var(--line);
+}
+#editorWrap{flex:1 1 auto;overflow:hidden;position:relative;background:var(--panel)}
+.CodeMirror{height:100%;font-family:var(--mono);font-size:14px;line-height:1.6}
+#fallbackEditor{
+  position:absolute;inset:0;width:100%;height:100%;resize:none;border:0;outline:none;padding:12px;
+  background:var(--panel);color:var(--fg);font-family:var(--mono);font-size:14px;line-height:1.6;
+}
+/* ---------- 输出 ---------- */
+#output{
+  flex:1 1 auto;overflow:auto;padding:10px 12px;background:var(--bg);
+  font-family:var(--mono);font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word;
+}
+#output .o-line{min-height:1.55em}
+#output .o-line span{white-space:pre-wrap}
+#output .o-stdout{color:var(--fg)}
+#output .o-stderr{color:var(--err)}
+#output .o-echo{color:var(--dim)}
+#output .o-err{color:var(--err);white-space:pre-wrap}
+#output .o-ret{color:var(--ok)}
+#output .o-sys{color:var(--accent)}
+#output img{max-width:100%;border-radius:6px;border:1px solid var(--line);margin:6px 0;background:#fff}
+#output hr{border:0;border-top:1px dashed var(--line);margin:8px 0}
+#output .o-omit{color:var(--dim);font-size:12px}
+/* ---------- 输入区 ---------- */
+footer{flex:0 0 auto;background:var(--panel);border-top:1px solid var(--line);padding:6px 10px}
+.stdin-row{display:flex;gap:8px;align-items:center}
+.stdin-row .tag{font-size:12px;color:var(--dim);flex:0 0 auto}
+#stdinPrompt{font-family:var(--mono);color:var(--warn);flex:0 0 auto;max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#stdinInput{flex:1 1 auto;font-family:var(--mono)}
+#stdinPrefill{width:100%;height:64px;min-height:52px;font-family:var(--mono);resize:vertical;display:block}
+.hidden{display:none !important}
+/* ---------- 设置 ---------- */
+#settings{
+  flex:0 0 auto;display:none;gap:10px;flex-wrap:wrap;align-items:center;
+  padding:8px 12px;background:var(--panel2);border-bottom:1px solid var(--line);font-size:12px;color:var(--dim);
+}
+#settings.open{display:flex}
+#settings label{display:flex;gap:6px;align-items:center}
+#settings input[type=text]{min-width:280px;font-family:var(--mono);font-size:12px}
+kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px;font-family:var(--mono);font-size:11px}
+@media (max-width:820px){
+  main{flex-direction:column}
+  #splitter{display:none}
+  #left,#right{flex:1 1 50%}
+  .brand small{display:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">🐍 Python 在线运行环境<small id="pyver">WebAssembly · 加载中</small></div>
+  <button id="runBtn" class="primary" disabled>▶ 运行</button>
+  <button id="stopBtn" class="danger" disabled>⏹ 停止</button>
+  <button id="clearBtn">🗑 清空输出</button>
+  <select id="examples" title="示例代码">
+    <option value="">📚 示例…</option>
+  </select>
+  <div class="spacer"></div>
+  <input type="text" id="pkgInput" placeholder="包名，如 rich" size="12">
+  <button id="pkgBtn" disabled>安装(micropip)</button>
+  <select id="mirror" title="PyPI 镜像">
+    <option value="https://pypi.org/simple">PyPI 官方</option>
+    <option value="https://pypi.tuna.tsinghua.edu.cn/simple">清华镜像</option>
+    <option value="https://mirrors.aliyun.com/pypi/simple">阿里云镜像</option>
+  </select>
+  <button id="fileBtn">📂 打开 .py</button>
+  <button id="saveBtn">💾 下载 .py</button>
+  <button id="restartBtn" title="重启内核，清空所有变量">⟳ 重启</button>
+  <button id="themeBtn">🌓</button>
+  <button id="setBtn">⚙</button>
+  <div id="status"><span class="dot" id="dot"></span><span id="statusText">正在初始化…</span></div>
+  <input type="file" id="fileInput" accept=".py,.txt" class="hidden">
+</header>
+<div id="loadWrap"><div id="loadBar"></div></div>
+
+<div id="settings">
+  <label>运行时源
+    <select id="sourceSel"></select>
+  </label>
+  <label>自定义地址 <input type="text" id="customUrl" placeholder="https://cdn.jsdelivr.net/pyodide/v0.29.4/full/"></label>
+  <label>编辑器字号
+    <select id="fontSel">
+      <option value="12">12</option><option value="14" selected>14</option>
+      <option value="16">16</option><option value="18">18</option>
+    </select>
+  </label>
+  <label>运行超时
+<select id="timeoutSel">
+<option value="0">不限</option>
+<option value="15000">15 秒</option>
+<option value="30000" selected>30 秒</option>
+<option value="60000">60 秒</option>
+</select>
+</label>
+<label><input type="checkbox" id="skipPreload"> 跳过运行时预加载（直接启动，不显示下载进度）</label>
+<span>提示：交互式 <code>input()</code> 与"停止"需要浏览器支持 SharedArrayBuffer；
+  若不支持，请在下方输入框<b>预填</b>输入内容（每行一次）；“停止”会退化为<b>重启内核</b>。</span>
+</div>
+
+<main>
+  <section class="pane" id="left">
+    <div class="pane-head">
+      <span>📝 编辑器</span>
+      <span class="spacer"></span>
+      <span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> 运行 · <kbd>Ctrl</kbd>+<kbd>/</kbd> 注释 · <kbd>Tab</kbd> 缩进</span>
+    </div>
+    <div id="editorWrap">
+      <textarea id="code">
+# 欢迎使用 Python 在线运行环境（真实 CPython，运行在浏览器 WebAssembly 中）
+# 按 Ctrl + Enter 或点击「▶ 运行」执行
+
+print("Hello, Python!")
+
+nums = [n ** 2 for n in range(1, 11)]
+print("平方数：", nums)
+
+for i in range(3):
+    print(f"第 {i + 1} 次循环")
+
+import sys
+print("Python 版本：", sys.version.split()[0])
+</textarea>
+    </div>
+  </section>
+
+  <div id="splitter"></div>
+
+  <section class="pane" id="right">
+    <div class="pane-head">
+      <span>🖥 输出 / 终端</span>
+      <span class="spacer"></span>
+      <span id="timing"></span>
+    </div>
+    <div id="output"></div>
+  </section>
+</main>
+
+<footer>
+  <div class="stdin-row" id="liveRow">
+    <span class="tag">标准输入</span>
+    <span id="stdinPrompt">›</span>
+    <input type="text" id="stdinInput" placeholder="程序调用 input() 时，在此输入并回车（Enter 发送）" autocomplete="off" spellcheck="false">
+    <button id="stdinEof">EOF</button>
+  </div>
+  <div class="stdin-row hidden" id="prefillRow">
+    <span class="tag">预填输入</span>
+    <textarea id="stdinPrefill" rows="3" placeholder="当前浏览器不支持交互式输入：请在此预填，每行对应一次 input()"></textarea>
+  </div>
+</footer>
+
+<!-- ===================== Worker：Pyodide 运行时 ===================== -->
+<script id="worker-src" type="javascript/worker">
+let pyodide = null;
+let interruptBuf = null;
+let ctrl = null;      // Int32Array 视图：[0]=状态 0等待/1有数据/2 EOF/3 中断, [1]=字节长度
+let sabBytes = null;  // Uint8Array 视图，数据区从偏移 16 开始
+let queue = [];       // 无 SharedArrayBuffer 时的预填队列
+const decoder = new TextDecoder("utf-8");
+const encoder = new TextEncoder();
+
+function post(msg) { self.postMessage(msg); }
+function out(stream, text) { post({ type: "out", stream: stream, text: text }); }
+
+/* 字节级输出处理器：streaming 解码，UTF-8 多字节跨块也不会乱码，
+   且 print() 写入的 "\\n" 一定会被送到主线程（batched 模式依赖行缓冲，容易丢末尾换行） */
+function makeStreamWriter(stream) {
+  const dec = new TextDecoder("utf-8");
+  return function (buf) {
+    let text = "";
+    try { text = dec.decode(buf, { stream: true }); }
+    catch (e) { try { text = dec.decode(buf); } catch (e2) { text = ""; } }
+    if (text) out(stream, text);
+    return buf.length;
+  };
+}
+
+/* ---- 阻塞式 stdin：在 Worker 线程里用 Atomics.wait 等待主线程送来输入 ---- */
+function stdinHandler() {
+  if (!ctrl) return queue.length ? queue.shift() : undefined;   // 降级：预填队列
+  Atomics.store(ctrl, 0, 0);
+  post({ type: "stdin_request" });
+  while (Atomics.load(ctrl, 0) === 0) {
+    Atomics.wait(ctrl, 0, 0, 1000);                              // 阻塞 worker，不冻结界面
+    if (interruptBuf && Atomics.load(interruptBuf, 0) === 2) break;
+  }
+  const flag = Atomics.load(ctrl, 0);
+  if (flag === 2) return undefined;                              // EOF → input() 抛 EOFError
+  if (flag === 3) {                                              // 用户在等待输入时点了「停止」
+    if (interruptBuf) Atomics.store(interruptBuf, 0, 2);
+    return "";                                                   // 空行 + SIGINT → KeyboardInterrupt
+  }
+  const len = Atomics.load(ctrl, 1);
+  return decoder.decode(sabBytes.subarray(16, 16 + len));
+}
+
+async function init(msg) {
+  if (msg.stdinSAB) {
+    ctrl = new Int32Array(msg.stdinSAB);
+    sabBytes = new Uint8Array(msg.stdinSAB);
+  }
+  if (msg.interruptSAB) interruptBuf = new Int32Array(msg.interruptSAB);
+
+  self.importScripts(msg.indexURL + "pyodide.js");
+  pyodide = await loadPyodide({ indexURL: msg.indexURL });
+  // 用字节级 write handler（而非按行的 batched），保证 print 末尾的 "\\n" 原样送达
+  pyodide.setStdout({ write: makeStreamWriter("stdout") });
+  pyodide.setStderr({ write: makeStreamWriter("stderr") });
+  pyodide.setStdin({ stdin: stdinHandler, isatty: false, autoEOF: true });
+  if (interruptBuf) pyodide.setInterruptBuffer(interruptBuf);
+
+  // 供 Python 侧回调的宿主接口（图片 / HTML / 文件）
+  pyodide.registerJsModule("pyide_host", {
+    send_image: (b64) => post({ type: "image", data: b64 }),
+    send_html: (html) => post({ type: "html", data: html }),
+    send_file: (name, b64) => post({ type: "file", name: name, data: b64 }),
+  });
+
+  await pyodide.loadPackage(["micropip"]);
+  pyodide.runPython(BOOTSTRAP);
+
+  post({ type: "ready", version: pyodide.runPython("import sys; sys.version.split()[0]"), pyodide: pyodide.version });
+}
+
+/* 解析用户代码里 import 的第三方模块名（排除标准库与已加载模块） */
+const BOOTSTRAP = `
+import ast, sys, io, base64
+
+# 非 tty 时 Python 默认块缓冲，print 会攒着不发 —— 改成行缓冲，一条 print 一次输出
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(line_buffering=True, encoding="utf-8")
+    except Exception:
+        pass
+
+def _pyide_missing_modules(code):
+    mods = set()
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                mods.add(a.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            mods.add(node.module.split(".")[0])
+    std = getattr(sys, "stdlib_module_names", set())
+    skip = {"micropip", "pyodide", "pyodide_js", "js", "pyide_host"}
+    return sorted(m for m in mods if m and m not in std and m not in skip and m not in sys.modules)
+
+def _pyide_patch_matplotlib():
+    try:
+        import matplotlib
+        if matplotlib.get_backend().lower() != "agg":
+            matplotlib.use("AGG")
+        import matplotlib.pyplot as plt
+        if getattr(plt, "_pyide_patched", False):
+            return True
+        import pyide_host
+        def _show(*args, **kwargs):
+            buf = io.BytesIO()
+            plt.savefig(buf, format="png", dpi=110, bbox_inches="tight")
+            buf.seek(0)
+            pyide_host.send_image(base64.b64encode(buf.read()).decode("ascii"))
+            plt.close("all")
+        plt.show = _show
+        plt._pyide_patched = True
+        return True
+    except Exception:
+        return False
+
+def show(obj=None, **kwargs):
+    """在输出区显示图片（PIL.Image / 本地文件路径 / base64 字符串）"""
+    import pyide_host
+    try:
+        from PIL import Image
+        if isinstance(obj, Image.Image):
+            buf = io.BytesIO(); obj.save(buf, format="PNG")
+            pyide_host.send_image(base64.b64encode(buf.getvalue()).decode("ascii")); return
+    except Exception:
+        pass
+    if isinstance(obj, str):
+        try:
+            with open(obj, "rb") as f:
+                pyide_host.send_image(base64.b64encode(f.read()).decode("ascii")); return
+        except Exception:
+            pyide_host.send_html(obj)
+`;
+
+async function ensurePackages(code, mirror) {
+  const missingFn = pyodide.globals.get("_pyide_missing_modules");
+  let mods = [];
+  try { mods = missingFn(code).toJs(); } catch (e) { mods = []; }
+  missingFn.destroy && missingFn.destroy();
+  const pip = [];
+  for (const m of mods) {
+    try {
+      await pyodide.loadPackage(m, { messageCallback: (s) => post({ type: "status", text: s }) });
+    } catch (e) { pip.push(m); }
+  }
+  if (pip.length) {
+    post({ type: "status", text: "正在用 micropip 安装：" + pip.join(", ") });
+    await pyodide.runPythonAsync(
+      "import micropip\nawait micropip.install(" + JSON.stringify(pip) + ", index_urls=" + JSON.stringify([mirror]) + ")"
+    );
+  }
+}
+
+async function handleRun(msg) {
+  queue = msg.stdinLines || [];
+  if (interruptBuf) Atomics.store(interruptBuf, 0, 0);
+  const t0 = Date.now();
+  try {
+    await ensurePackages(msg.code, msg.mirror);
+    pyodide.runPython("_pyide_patch_matplotlib()");
+    const result = await pyodide.runPythonAsync(msg.code);
+    if (result !== undefined && result !== null) {
+      pyodide.globals.set("_pyide_last", result);
+      const rep = pyodide.runPython("repr(_pyide_last)");
+      if (rep && rep !== "None") post({ type: "ret", text: rep });
+    }
+    pyodide.runPython(`
+try:
+    del _pyide_last
+except Exception:
+    pass`);
+  } catch (e) {
+    let text = (e && e.message) ? e.message : String(e);
+    text = text.replace(/^PythonError:?\s*/i, "");
+    if (/SystemExit/.test(text)) {
+      post({ type: "sys", text: "程序调用了 exit() / quit()，内核已结束 —— 正在自动重启…（请改用 if __name__ 或 try 包裹）" });
+      post({ type: "exit" });                      // 通知主线程重建内核，避免留下一个死内核
+    }
+    if (/KeyboardInterrupt/.test(text)) {
+      post({ type: "sys", text: "已中断（KeyboardInterrupt）" });
+    }
+    post({ type: "error", text: text });
+  } finally {
+    post({ type: "done", ms: Date.now() - t0 });
+  }
+}
+
+async function handleInstall(msg) {
+  try {
+    await pyodide.loadPackage("micropip");
+    const names = msg.names;
+    const res = await pyodide.runPythonAsync(
+      "import micropip\nr = await micropip.install(" + JSON.stringify(names) + ", index_urls=" + JSON.stringify([msg.mirror]) + ")\nstr(r)"
+    );
+    post({ type: "sys", text: "✔ 已安装：" + names.join(", ") });
+  } catch (e) {
+    post({ type: "error", text: ((e && e.message) || String(e)).replace(/^PythonError:?\s*/i, "") });
+  } finally {
+    post({ type: "done", ms: 0 });
+  }
+}
+
+self.onmessage = async (ev) => {
+  const msg = ev.data;
+  try {
+    if (msg.type === "init") await init(msg);
+    else if (msg.type === "run") await handleRun(msg);
+    else if (msg.type === "install") await handleInstall(msg);
+  } catch (e) {
+    post({ type: "fatal", text: ((e && e.message) || String(e)) });
+  }
+};
+</script>
+
+<!-- ===================== 主线程 ===================== -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/comment/comment.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/selection/active-line.min.js"></script>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const output = $("#output"), statusText = $("#statusText"), dot = $("#dot");
+const runBtn = $("#runBtn"), stopBtn = $("#stopBtn");
+
+const SOURCES = [
+  { name: "jsDelivr v0.29.4（推荐）", url: "https://cdn.jsdelivr.net/pyodide/v0.29.4/full/" },
+  { name: "fastly jsDelivr v0.29.4", url: "https://fastly.jsdelivr.net/pyodide/v0.29.4/full/" },
+  { name: "jsDelivr v0.28.0", url: "https://cdn.jsdelivr.net/pyodide/v0.28.0/full/" },
+  { name: "jsDelivr v0.26.4", url: "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/" },
+  { name: "unpkg v0.29.4", url: "https://unpkg.com/pyodide@0.29.4/" },
+  { name: "jsDelivr dev（最新测试版）", url: "https://cdn.jsdelivr.net/pyodide/dev/full/" },
+];
+const HAS_SAB = typeof SharedArrayBuffer === "function" && typeof Atomics === "object" && typeof Atomics.wait === "function";
+
+let worker = null, ready = false, running = false, editor = null;
+let stdinSAB = null, stdinCtrl = null, stdinBytes = null, interruptBuf = null;
+let awaitingInput = false;
+let runTimer = null;      // 运行超时看门狗
+let forceTimer = null;    // 中断无响应后的强制重启定时器
+
+/* ---------- 编辑器 ---------- */
+function buildEditor() {
+  const ta = $("#code");
+  if (window.CodeMirror) {
+    editor = CodeMirror.fromTextArea(ta, {
+      mode: "python", theme: "monokai", lineNumbers: true, indentUnit: 4, tabSize: 4,
+      indentWithTabs: false, autoCloseBrackets: true, matchBrackets: true,
+      styleActiveLine: true, lineWrapping: false,
+      extraKeys: {
+        "Ctrl-Enter": () => runCode(), "Cmd-Enter": () => runCode(),
+        "Ctrl-/": (cm) => cm.toggleComment(), "Cmd-/": (cm) => cm.toggleComment(),
+        Tab: (cm) => (cm.somethingSelected() ? cm.indentSelection("add") : cm.replaceSelection("    ")),
+      },
+    });
+  } else {
+    ta.id = "fallbackEditor";
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Tab") { e.preventDefault(); const s = ta.selectionStart; ta.value = ta.value.slice(0, s) + "    " + ta.value.slice(ta.selectionEnd); ta.selectionStart = ta.selectionEnd = s + 4; }
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runCode(); }
+    });
+  }
+  const saved = localStorage.getItem("pyide.code");
+  if (saved !== null) setCode(saved);
+}
+const getCode = () => (editor ? editor.getValue() : $("#code").value);
+const setCode = (v) => (editor ? editor.setValue(v) : ($("#code").value = v));
+
+/* ---------- 输出 ---------- */
+/* 渲染模型：一行 = 一个块级 <div class="o-line">
+   块级元素天然独占一行，不再依赖 white-space:pre-wrap 是否被浏览器正确应用，
+   因此 print() 的自动换行、字符串里的显式 \n、以及空行都能稳定显示。
+   v3.1：写入先进 DocumentFragment，由 requestAnimationFrame 批量插入 DOM；
+   并限制 DOM 行数上限，避免上万次 print 把页面卡死。 */
+const MAX_LINES = 2000;             // 输出区保留的最大行数
+let omittedLines = 0;               // 累计被丢弃的行数
+let frag = null;                    // 待批量插入的片段
+let flushScheduled = false;
+let stickBottom = true;             // 视口贴底时才自动滚动，不打断向上翻阅
+const root = () => frag || output;
+output.addEventListener("scroll", () => {
+  stickBottom = output.scrollHeight - output.scrollTop - output.clientHeight < 40;
+});
+let curLine = null;                 // 当前正在写入的那一行
+function ensureLine() {
+  if (!curLine || curLine.parentNode !== root()) {
+    curLine = document.createElement("div");
+    curLine.className = "o-line";
+    root().appendChild(curLine);
+  }
+  return curLine;
+}
+function closeLine() { curLine = null; }
+/* 当前行已有内容时另起一行，避免不同来源的输出粘在一起 */
+function ensureNewline() {
+  if (curLine && curLine.childNodes.length) closeLine();
+}
+/* rAF 批量落盘：一次 render 插入成百上千行，而不是每行一次重排 */
+function scheduleFlush() {
+  if (flushScheduled) return;
+  flushScheduled = true;
+  requestAnimationFrame(flushNow);
+}
+function flushNow() {
+  flushScheduled = false;
+  if (frag && frag.childNodes.length) { output.appendChild(frag); frag = null; }
+  enforceLimit();
+  if (stickBottom) output.scrollTop = output.scrollHeight;
+}
+/* 行数超限：丢掉最前面的一批行，顶部保留一条可更新的省略提示 */
+function enforceLimit() {
+  const over = output.childElementCount - MAX_LINES;
+  if (over <= 0) return;
+  for (let i = 0; i < over; i++) output.removeChild(output.firstElementChild);
+  omittedLines += over;
+  let note = output.firstElementChild;
+  if (!note || !note.dataset || note.dataset.omit !== "1") {
+    note = document.createElement("div");
+    note.className = "o-line"; note.dataset.omit = "1";
+    output.insertBefore(note, output.firstChild);
+  }
+  note.textContent = "";
+  const s = document.createElement("span");
+  s.className = "o-omit";
+  s.textContent = "… 已省略前 " + omittedLines + " 行（输出过长，仅保留最近 " + MAX_LINES + " 行）";
+  note.appendChild(s);
+}
+function append(text, cls) {
+  if (text === undefined || text === null || text === "") return;
+  if (!frag) frag = document.createDocumentFragment();   // 先攒着，等 rAF 一次性插入
+  const str = String(text).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const parts = str.split("\n");
+  for (let i = 0; i < parts.length; i++) {
+    ensureLine();                                   // 空段也占一行 → 空行能显示
+    if (parts[i] !== "") {
+      const span = document.createElement("span");
+      span.className = cls || "o-stdout";
+      span.style.whiteSpace = "pre-wrap";           // 兜底，防残留换行符
+      span.textContent = parts[i];
+      curLine.appendChild(span);
+    }
+    if (i < parts.length - 1) closeLine();          // 这一段后面跟着一个 \n
+  }
+  scheduleFlush();
+}
+function clearOutput() {
+  output.innerHTML = "";
+  frag = null; curLine = null; omittedLines = 0;
+  stickBottom = true;
+}
+/* 运行结束时丢掉末尾那个「光标所在」的空行 */
+function trimTrailingBlankLine() {
+  flushNow();
+  const last = output.lastElementChild;
+  if (last && last.classList.contains("o-line") && last.childNodes.length === 0) {
+    output.removeChild(last);
+  }
+  curLine = null;
+}
+function appendImage(b64) {
+  flushNow();                       // 先落盘，保证图片与前后文字的顺序
+  ensureNewline();
+  const img = document.createElement("img");
+  img.src = "data:image/png;base64," + b64;
+  ensureLine();
+  curLine.appendChild(img);
+  closeLine();
+  if (stickBottom) output.scrollTop = output.scrollHeight;
+}
+/* 把一个块级元素放进独立的一行 */
+function appendBlock(el) {
+  flushNow();
+  ensureNewline();
+  ensureLine();
+  curLine.appendChild(el);
+  closeLine();
+  if (stickBottom) output.scrollTop = output.scrollHeight;
+}
+function setStatus(text, cls) {
+  statusText.textContent = text;
+  dot.className = "dot " + (cls || "");
+}
+
+/* ---------- 启动 Worker ---------- */
+/* 探测顺序：并行 HEAD → 并行 Range GET（部分 CDN 不接受 HEAD）。
+   串行探测时代，前几个源超时会白白等上十几秒；并行后只取最快的那个。 */
+async function probeHead(url) {
+  try {
+    const r = await fetch(url + "pyodide.js", { method: "HEAD", mode: "cors", cache: "no-store" });
+    return r.ok ? url : null;
+  } catch (e) { return null; }
+}
+async function probeRange(url) {
+  try {
+    const r = await fetch(url + "pyodide.js", { mode: "cors", headers: { Range: "bytes=0-0" }, cache: "no-store" });
+    return (r.ok || r.status === 206) ? url : null;
+  } catch (e) { return null; }
+}
+async function pickSource() {
+  const urls = SOURCES.map((s) => s.url);
+  const hit = (await Promise.all(urls.map(probeHead))).find(Boolean);
+  if (hit) return hit;
+  return (await Promise.all(urls.map(probeRange))).find(Boolean) || null;
+}
+
+/* ---------- 运行时预加载：把几十 MB 的下载过程显示出来 ---------- */
+const PRELOAD = ["pyodide.js", "pyodide-lock.json", "pyodide.asm.wasm", "python_stdlib.zip"];
+const PRELOAD_BUDGET = 25000;                      // 预加载超过 25s 就放弃，直接启动
+function setLoad(pct, text) {
+  const w = $("#loadWrap"), b = $("#loadBar");
+  if (pct === null) { w.classList.remove("on", "ind"); b.style.width = "0"; return; }
+  w.classList.add("on");
+  if (pct < 0) w.classList.add("ind");             // 总大小未知 → 往返动画
+  else { w.classList.remove("ind"); b.style.width = Math.max(0, Math.min(100, pct)) + "%"; }
+  if (text) setStatus(text, "run");
+}
+const mb = (n) => (n / 1048576).toFixed(1) + " MB";
+async function preloadRuntime(indexURL) {
+  const ac = new AbortController();
+  const bail = setTimeout(() => ac.abort(), PRELOAD_BUDGET);
+  try {
+    const infos = await Promise.all(PRELOAD.map(async (f) => {
+      try {
+        const h = await fetch(indexURL + f, { method: "HEAD", mode: "cors", cache: "no-store", signal: ac.signal });
+        return { f: f, len: h.ok ? (+h.headers.get("content-length") || 0) : 0 };
+      } catch (e) { return { f: f, len: 0 }; }
+    }));
+    const total = infos.reduce((a, b) => a + b.len, 0);
+    let done = 0;
+    setLoad(total ? 0 : -1, "正在下载运行时…");
+    for (const it of infos) {
+      const res = await fetch(indexURL + it.f, { mode: "cors", signal: ac.signal });
+      if (!res.ok || !res.body) continue;
+      const reader = res.body.getReader();
+      while (true) {
+        const r = await reader.read();
+        if (r.done) break;
+        done += r.value.byteLength || 0;
+        setLoad(total ? (done / total) * 100 : -1,
+          total ? "正在下载运行时… " + mb(done) + " / " + mb(total) : "正在下载运行时… " + mb(done));
+      }
+    }
+    setLoad(100, "运行时下载完成，正在初始化 Python…");
+  } catch (e) {
+    setLoad(-1, "预加载未完成，直接启动…");          // 失败不阻塞，交给 Worker 自己加载
+  } finally {
+    clearTimeout(bail);
+  }
+}
+
+function spawnWorker(indexURL) {
+  const src = document.getElementById("worker-src").textContent;
+  const blob = new Blob([src], { type: "text/javascript" });
+  worker = new Worker(URL.createObjectURL(blob));
+
+  worker.onmessage = (ev) => {
+    const m = ev.data;
+    if (m.type === "ready") {
+      ready = true;
+      $("#pyver").textContent = "Python " + m.version + " · Pyodide " + m.pyodide;
+      setLoad(null);
+      setStatus("就绪", "ok");
+      runBtn.disabled = false; $("#pkgBtn").disabled = false;
+      append("Python " + m.version + "（Pyodide " + m.pyodide + "，WebAssembly）已就绪\n" +
+        (HAS_SAB ? "交互输入：支持 · 停止：支持（SIGINT）\n"
+                 : "交互输入：预填模式 · 停止：重启内核（当前环境无 SharedArrayBuffer）\n"), "o-sys");
+      closeLine();
+      output.appendChild(document.createElement("hr"));
+    } else if (m.type === "out") {
+      append(m.text, m.stream === "stderr" ? "o-stderr" : "o-stdout");
+    } else if (m.type === "ret") {
+      ensureNewline();
+      append("⟶ " + m.text + "\n", "o-ret");
+    } else if (m.type === "error") {
+      ensureNewline();
+      append(m.text + "\n", "o-err");
+    } else if (m.type === "sys") {
+      ensureNewline();
+      append(m.text + "\n", "o-sys");
+    } else if (m.type === "image") {
+      appendImage(m.data);
+    } else if (m.type === "html") {
+      const d = document.createElement("div"); d.innerHTML = m.data; appendBlock(d);
+    } else if (m.type === "file") {
+      const a = document.createElement("a");
+      a.href = "data:application/octet-stream;base64," + m.data; a.download = m.name;
+      a.textContent = "⬇ 下载文件 " + m.name; a.style.color = "var(--accent)";
+      appendBlock(a);
+    } else if (m.type === "status") {
+      setStatus(m.text, "run");
+    } else if (m.type === "stdin_request") {
+      awaitingInput = true;
+      $("#stdinPrompt").textContent = "› 等待输入";
+      $("#stdinInput").focus();
+      setStatus("程序正在等待 input()", "run");
+    } else if (m.type === "done") {
+      running = false; awaitingInput = false;
+      clearTimeout(runTimer); runTimer = null;
+      clearTimeout(forceTimer); forceTimer = null;
+      ensureNewline();            // print(..., end="") 这类没换行的收尾，补一个
+      trimTrailingBlankLine();    // 去掉末尾那个多余的光标空行
+      runBtn.disabled = false; stopBtn.disabled = true;
+      if (m.ms) $("#timing").textContent = "耗时 " + m.ms + " ms";
+      setStatus("就绪", "ok");
+      $("#stdinPrompt").textContent = "›";
+    } else if (m.type === "fatal") {
+      running = false; runBtn.disabled = false; stopBtn.disabled = true;
+      clearTimeout(runTimer); runTimer = null;
+      setStatus("运行时错误", "err");
+      append("\n[运行时错误] " + m.text + "\n", "o-err");
+    } else if (m.type === "exit") {
+      hardRestart(null);                            // SystemExit：内核已不可用，直接重建
+    }
+  };
+  worker.onerror = (e) => {
+    setLoad(null);
+    running = false; runBtn.disabled = false; stopBtn.disabled = true;
+    setStatus("Worker 启动失败", "err");
+    append("\n[错误] 无法创建 Worker：" + (e.message || "") +
+      "\n请改用本地服务器打开（运行 启动本地服务器.py），或换用 Chrome / Edge / Firefox 最新版。\n", "o-err");
+  };
+
+  if (HAS_SAB) {
+    stdinSAB = new SharedArrayBuffer(16 + 8192);
+    stdinCtrl = new Int32Array(stdinSAB);
+    stdinBytes = new Uint8Array(stdinSAB);
+    interruptBuf = new Int32Array(new SharedArrayBuffer(4));
+  }
+  setStatus("正在加载 Python 运行时…", "run");
+  setLoad(-1);
+  worker.postMessage({
+    type: "init", indexURL: indexURL,
+    stdinSAB: stdinSAB || null, interruptSAB: interruptBuf ? interruptBuf.buffer : null,
+  });
+}
+
+async function boot() {
+  buildEditor();
+  if (HAS_SAB) { $("#prefillRow").classList.add("hidden"); }
+  else { $("#liveRow").classList.add("hidden"); $("#prefillRow").classList.remove("hidden"); }
+  $("#skipPreload").checked = localStorage.getItem("pyide.skipPreload") === "1";
+  const savedTimeout = localStorage.getItem("pyide.timeout");
+  if (savedTimeout) $("#timeoutSel").value = savedTimeout;
+
+  let url = localStorage.getItem("pyide.src");
+  if (!url || !SOURCES.some((s) => s.url === url)) {
+    setStatus("正在探测可用的 CDN…", "run");
+    url = await pickSource();
+  }
+  if (!url) {
+    setStatus("无法连接 CDN", "err");
+    append("⚠ 无法从任何 CDN 加载 Pyodide 运行时。请检查网络，或在 ⚙ 设置里填写自定义的运行时地址（例如下载 Pyodide 后本地自托管）。\n", "o-err");
+    return;
+  }
+  localStorage.setItem("pyide.src", url);
+  $("#sourceSel").value = SOURCES.some((s) => s.url === url) ? url : "custom";
+  if (!SOURCES.some((s) => s.url === url)) $("#customUrl").value = url;
+  /* 先把运行时主体拉一遍，好把「几十 MB 的空白等待」变成可见进度；
+     之后 Pyodide 自己再取一遍时通常命中浏览器缓存，不会再产生实际流量。 */
+  if (!$("#skipPreload").checked) await preloadRuntime(url);
+  spawnWorker(url);
+}
+
+/* ---------- 运行 ---------- */
+function runCode() {
+  if (!ready || running) return;
+  const code = getCode();
+  if (!code.trim()) return;
+  localStorage.setItem("pyide.code", code);
+  running = true; awaitingInput = false;
+  runBtn.disabled = true; stopBtn.disabled = false;   // 无 SAB 时也能「停止」（退化成重启内核）
+  clearOutput();
+  $("#timing").textContent = "";
+  setStatus("运行中…", "run");
+  armWatchdog();
+  const lines = HAS_SAB ? [] : $("#stdinPrefill").value.split("\n");
+  worker.postMessage({ type: "run", code: code, stdinLines: lines, mirror: $("#mirror").value });
+}
+/* 超时兜底：死循环 / 网络挂起时，页面不至于永远转圈 */
+function armWatchdog() {
+  clearTimeout(runTimer); runTimer = null;
+  const ms = +($("#timeoutSel") ? $("#timeoutSel").value : 0);
+  if (!ms) return;
+  runTimer = setTimeout(() => {
+    if (!running) return;
+    append("\n⏱ 运行超过 " + (ms / 1000) + " 秒，正在中断…\n", "o-sys");
+    stopRun(true);
+  }, ms);
+}
+
+function sendStdin(text, eof) {
+  if (!HAS_SAB) return;
+  if (eof) { Atomics.store(stdinCtrl, 0, 2); }
+  else {
+    const bytes = new TextEncoder().encode(text);
+    const n = Math.min(bytes.length, 8192 - 1);
+    stdinBytes.set(bytes.subarray(0, n), 16);
+    Atomics.store(stdinCtrl, 1, n);
+    Atomics.store(stdinCtrl, 0, 1);
+  }
+  Atomics.notify(stdinCtrl, 0);
+  $("#stdinInput").value = "";
+  $("#stdinPrompt").textContent = "›";
+}
+
+function stopRun(auto) {
+  if (!running) return;
+  if (HAS_SAB) {
+    Atomics.store(interruptBuf, 0, 2);           // SIGINT → KeyboardInterrupt
+    Atomics.store(stdinCtrl, 0, 3); Atomics.notify(stdinCtrl, 0);
+    append("\n^C 已请求中断（KeyboardInterrupt）\n", "o-sys");
+    /* 兜底：C 扩展里的死循环可能吃不到 SIGINT，3 秒后直接重建内核 */
+    clearTimeout(forceTimer);
+    forceTimer = setTimeout(() => {
+      if (running) hardRestart("中断无响应，已强制重启内核");
+    }, 3000);
+  } else {
+    /* 降级：没有 SharedArrayBuffer 就发不出中断信号，只能终止 Worker 重建。
+       代价是丢失全部变量，但比整页卡死强。 */
+    hardRestart("当前环境不支持中断，已终止并重启内核");
+  }
+}
+/* 彻底重建内核：终止旧 Worker、清空共享内存、重新加载 */
+function hardRestart(reason) {
+  clearTimeout(runTimer); runTimer = null;
+  clearTimeout(forceTimer); forceTimer = null;
+  if (worker) { worker.onmessage = null; worker.onerror = null; worker.terminate(); }
+  worker = null; ready = false; running = false; awaitingInput = false;
+  runBtn.disabled = true; stopBtn.disabled = true;
+  setLoad(null);
+  if (reason) append("\n⟳ " + reason + "，正在重新加载运行时…\n", "o-sys");
+  stdinSAB = null; stdinCtrl = null; stdinBytes = null; interruptBuf = null;
+  const url = localStorage.getItem("pyide.src") || SOURCES[0].url;
+  spawnWorker(url);
+}
+
+/* ---------- 示例 ---------- */
+const EXAMPLES = [
+  { name: "① 入门：语法速览", code: `# 基础语法速览
+name = "Python"
+print(f"你好，{name}！")
+
+# 列表推导 + 内置函数
+squares = [x ** 2 for x in range(10) if x % 2 == 0]
+print("偶数平方:", squares, "总和:", sum(squares))
+
+# 字典与解包
+info = {"lang": "Python", "year": 1991}
+print("{lang} 诞生于 {year}".format(**info))
+
+# 函数、默认参数、*args
+def total(*args, base=0):
+    return base + sum(args)
+print("total(1,2,3, base=10) =", total(1, 2, 3, base=10))
+
+# lambda / map / filter / zip
+pairs = list(zip(range(5), map(lambda x: x * x, range(5))))
+print("zip:", pairs)
+` },
+  { name: "② 交互式 input()", code: `# 运行后，在下方的「标准输入」框里输入内容并回车
+name = input("请输入你的名字：")
+age = int(input("请输入年龄："))
+print(f"你好 {name}，明年你 {age + 1} 岁。")
+
+# 循环读取，直到输入空行或 EOF
+print("下面请连续输入数字（直接回车结束）：")
+while True:
+    try:
+        s = input("数字> ")
+    except EOFError:
+        print("（收到 EOF，结束）"); break
+    if not s.strip():
+        break
+    print("  你输入了:", float(s) ** 2)
+` },
+  { name: "③ Matplotlib 绘图", code: `import numpy as np
+import matplotlib.pyplot as plt
+
+x = np.linspace(0, 2 * np.pi, 400)
+fig, ax = plt.subplots(1, 2, figsize=(11, 4))
+
+ax[0].plot(x, np.sin(x), label="sin(x)")
+ax[0].plot(x, np.cos(x), "--", label="cos(x)")
+ax[0].set_title("Trigonometric functions")
+ax[0].legend(); ax[0].grid(alpha=.3)
+
+ax[1].scatter(np.random.randn(200), np.random.randn(200), c=np.random.rand(200), s=25, alpha=.7)
+ax[1].set_title("Random scatter")
+
+plt.tight_layout()
+plt.show()          # 图片会直接渲染在右侧输出区
+print("绘图完成 ✅（注意：matplotlib 默认无中文字体，标题建议用英文）")
+` },
+  { name: "④ NumPy 科学计算", code: `import numpy as np
+
+a = np.arange(1, 13).reshape(3, 4)
+print("矩阵 a:\\n", a)
+print("转置:\\n", a.T)
+print("矩阵乘法 a @ a.T:\\n", a @ a.T)
+
+print("\\n统计:", "均值", a.mean(), "标准差", round(a.std(), 4), "最大", a.max())
+print("线性方程组 Ax=b 的解:")
+A = np.array([[3, 1], [1, 2]]); b = np.array([9, 8])
+print(np.linalg.solve(A, b))
+print("特征值:", np.linalg.eigvals(A))
+` },
+  { name: "⑤ Pandas 数据分析", code: `import pandas as pd
+import numpy as np
+
+rng = np.random.default_rng(42)
+df = pd.DataFrame({
+    "city": rng.choice(["Beijing", "Shanghai", "Guangzhou", "Shenzhen"], 20),
+    "sales": rng.integers(100, 1000, 20),
+    "profit": rng.normal(50, 15, 20).round(2),
+})
+print(df.head())
+print("\\n分组汇总:")
+print(df.groupby("city").agg({"sales": "sum", "profit": "mean"}).sort_values("sales", ascending=False))
+print("\\n描述统计:")
+print(df[["sales", "profit"]].describe().round(2))
+` },
+  { name: "⑥ 文件读写（虚拟文件系统）", code: `import os, json
+
+# Pyodide 提供内存文件系统，刷新页面后清空
+os.makedirs("/data", exist_ok=True)
+with open("/data/notes.txt", "w", encoding="utf-8") as f:
+    f.write("第一行\\n第二行\\n第三行\\n")
+
+with open("/data/notes.txt", encoding="utf-8") as f:
+    print(f.read())
+
+data = {"users": [{"name": "Alice", "score": 92}, {"name": "Bob", "score": 78}]}
+with open("/data/users.json", "w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=False)
+print("JSON 回读:", json.load(open("/data/users.json", encoding="utf-8")))
+print("/data 目录:", os.listdir("/data"))
+print("当前工作目录:", os.getcwd())
+` },
+  { name: "⑦ 面向对象 / 生成器 / 装饰器", code: `from functools import wraps
+from dataclasses import dataclass
+import time, random, string
+
+def timer(func):
+    @wraps(func)
+    def wrapper(*a, **kw):
+        t = time.time(); r = func(*a, **kw)
+        print(f"[timer] {func.__name__} 用时 {(time.time()-t)*1000:.2f} ms")
+        return r
+    return wrapper
+
+@dataclass
+class Stack:
+    items: list = None
+    def __post_init__(self): self.items = self.items or []
+    def push(self, x): self.items.append(x); return self
+    def pop(self): return self.items.pop()
+
+def fib():                       # 无限生成器
+    a, b = 0, 1
+    while True:
+        yield a; a, b = b, a + b
+
+@timer
+def work():
+    s = Stack(); [s.push(i) for i in range(5)]
+    g = fib()
+    return [next(g) for _ in range(10)], s.pop()
+
+nums, top = work()
+print("斐波那契前 10 项:", nums)
+print("栈顶:", top)
+
+# 异常处理
+try:
+    1 / 0
+except ZeroDivisionError as e:
+    print("捕获异常:", type(e).__name__, e)
+finally:
+    print("finally 总是执行")
+` },
+  { name: "⑧ 安装第三方包（micropip）", code: `# 纯 Python 包可用 micropip 从 PyPI 安装（含 C 扩展的包需 Pyodide 预编译）
+import micropip
+await micropip.install("pytz")
+
+import pytz, datetime
+tz = pytz.timezone("Asia/Shanghai")
+print("上海时间:", datetime.datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S %Z"))
+print("纽约时间:", datetime.datetime.now(pytz.timezone("America/New_York")).strftime("%H:%M:%S"))
+
+# 也可以点顶部「安装(micropip)」按钮，如：rich / requests / python-dateutil
+` },
+  { name: "⑨ 异步与并发（asyncio）", code: `import asyncio, time
+
+async def task(name, delay):
+    print(f"{name} 开始")
+    await asyncio.sleep(delay)
+    print(f"{name} 结束（{delay}s）")
+    return name.upper()
+
+t0 = time.time()
+results = await asyncio.gather(task("任务A", 0.5), task("任务B", 0.8), task("任务C", 0.3))
+print("结果:", results, f"总耗时 {time.time()-t0:.2f}s（并发执行）")
+` },
+  { name: "⑩ 输出图片 / HTML（宿主接口）", code: `# 内置 show() 可显示图片文件或 HTML；pyide_host 提供更多通道
+import io, base64
+try:
+    import micropip; await micropip.install("pillow")
+    from PIL import Image, ImageDraw
+    img = Image.new("RGB", (320, 120), (24, 26, 34))
+    d = ImageDraw.Draw(img)
+    d.rectangle([20, 20, 300, 100], outline=(78, 161, 255), width=3)
+    d.text((40, 55), "Hello from PIL", fill=(87, 211, 140))
+    show(img)                       # 直接渲染到输出区
+except Exception as e:
+    print("无法加载 pillow:", e)
+
+# 显示 HTML
+import pyide_host
+pyide_host.send_html("<div style='padding:10px;border:1px solid #4ea1ff;border-radius:6px'>来自 Python 的 <b>HTML</b> 内容</div>")
+` },
+];
+
+/* ---------- 事件绑定 ---------- */
+$("#examples").innerHTML += EXAMPLES.map((e, i) => `<option value="${i}">${e.name}</option>`).join("");
+$("#examples").addEventListener("change", (e) => {
+  const i = e.target.value;
+  if (i === "") return;
+  setCode(EXAMPLES[+i].code);
+  localStorage.setItem("pyide.code", EXAMPLES[+i].code);
+  e.target.value = "";
+});
+$("#sourceSel").innerHTML = SOURCES.map((s) => `<option value="${s.url}">${s.name}</option>`).join("") + '<option value="custom">自定义…</option>';
+
+runBtn.addEventListener("click", runCode);
+stopBtn.addEventListener("click", () => stopRun(false));
+$("#clearBtn").addEventListener("click", () => { clearOutput(); $("#timing").textContent = ""; });
+$("#stdinInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendStdin(e.target.value, false); });
+$("#stdinEof").addEventListener("click", () => sendStdin("", true));
+$("#pkgBtn").addEventListener("click", () => {
+  const v = $("#pkgInput").value.trim();
+  if (!v) return;
+  const names = v.split(/[\s,]+/).filter(Boolean);
+  runBtn.disabled = true; setStatus("安装中…", "run");
+  running = true; stopBtn.disabled = false; armWatchdog();   // 装包也可能卡死，同样受超时保护
+  append("$ micropip install " + names.join(" ") + "\n", "o-sys");
+  worker.postMessage({ type: "install", names: names, mirror: $("#mirror").value });
+});
+$("#restartBtn").addEventListener("click", () => {
+  clearOutput();
+  hardRestart(null);
+});
+$("#themeBtn").addEventListener("click", () => {
+  const light = document.documentElement.getAttribute("data-theme") === "light";
+  document.documentElement.setAttribute("data-theme", light ? "" : "light");
+  if (editor) editor.setOption("theme", light ? "monokai" : "default");
+});
+$("#setBtn").addEventListener("click", () => $("#settings").classList.toggle("open"));
+$("#sourceSel").addEventListener("change", (e) => {
+  let u = e.target.value;
+  if (u === "custom") u = $("#customUrl").value.trim() || prompt("运行时地址（以 / 结尾，需包含 pyodide.js）:", "https://cdn.jsdelivr.net/pyodide/v0.29.4/full/");
+  if (!u) { e.target.value = localStorage.getItem("pyide.src") || ""; return; }
+  localStorage.setItem("pyide.src", u);
+  $("#restartBtn").click();
+});
+$("#customUrl").addEventListener("change", (e) => {
+  const u = e.target.value.trim();
+  if (u) { localStorage.setItem("pyide.src", u); $("#restartBtn").click(); }
+});
+$("#timeoutSel").addEventListener("change", (e) => localStorage.setItem("pyide.timeout", e.target.value));
+$("#skipPreload").addEventListener("change", (e) => localStorage.setItem("pyide.skipPreload", e.target.checked ? "1" : "0"));
+$("#fontSel").addEventListener("change", (e) => {
+  const size = e.target.value + "px";
+  document.querySelectorAll(".CodeMirror").forEach((el) => (el.style.fontSize = size));
+  if (!editor) $("#fallbackEditor").style.fontSize = size;
+});
+$("#mirror").value = localStorage.getItem("pyide.mirror") || "https://pypi.tuna.tsinghua.edu.cn/simple";
+$("#mirror").addEventListener("change", () => localStorage.setItem("pyide.mirror", $("#mirror").value));
+$("#saveBtn").addEventListener("click", () => {
+  const blob = new Blob([getCode()], { type: "text/x-python;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "main.py"; a.click();
+});
+$("#fileBtn").addEventListener("click", () => $("#fileInput").click());
+$("#fileInput").addEventListener("change", (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { setCode(r.result); localStorage.setItem("pyide.code", r.result); };
+  r.readAsText(f, "utf-8");
+});
+
+/* 分栏拖拽 */
+(() => {
+  const sp = $("#splitter"), left = $("#left"), main = $("main");
+  let dragging = false;
+  sp.addEventListener("mousedown", () => { dragging = true; document.body.style.userSelect = "none"; });
+  window.addEventListener("mouseup", () => { dragging = false; document.body.style.userSelect = ""; });
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const rect = main.getBoundingClientRect();
+    const pct = Math.min(85, Math.max(15, ((e.clientX - rect.left) / rect.width) * 100));
+    left.style.flex = "0 0 " + pct + "%";
+  });
+})();
+
+window.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); runCode(); }
+});
+
+boot();
+</script>
+</body>
+</html>
