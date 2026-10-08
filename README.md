@@ -235,14 +235,9 @@ Q：能安装任意 pip 包吗？
 
 本项目站在以下开源项目的肩膀上：
 
-· JSCPP —— JavaScript 实现的 C++ 解释器
-
-· browsercc —— 浏览器中的 Clang / LLD（WebAssembly）
-
-· browser_wasi_shim —— 纯 JS 的 WASI 运行时
-
-· Pyodide —— CPython 的 WebAssembly 发行版
-
-· CodeMirror 5 —— 代码编辑器
-
-· jsDelivr / unpkg / cdnjs —— 静态资源 CDN
+- [JSCPP](https://github.com/felixhao28/JSCPP) —— JavaScript 实现的 C++ 解释器
+- [browsercc](https://www.npmjs.com/package/browsercc) —— 浏览器中的 Clang / LLD（WebAssembly）
+- [browser_wasi_shim](https://github.com/bjorn3/browser_wasi_shim) —— 纯 JS 的 WASI 运行时
+- [Pyodide](https://pyodide.org/) —— CPython 的 WebAssembly 发行版
+- [CodeMirror 5](https://codemirror.net/5/) —— 代码编辑器
+- [jsDelivr](https://www.jsdelivr.com/) / [unpkg](https://unpkg.com/) / [cdnjs](https://cdnjs.com/) —— 静态资源 CDN
